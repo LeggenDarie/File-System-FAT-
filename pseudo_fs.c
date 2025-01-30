@@ -101,6 +101,28 @@ void createFile(const char *fileName) {
            file_table[fileIndex].name, fileIndex, file_table[fileIndex].start_block);
 }
 
+// Function to erase a file
+void eraseFile(const char *fileName) {
+    int fileIndex = -1;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (file_table[i].in_use == 1 && strcmp(file_table[i].name, fileName) == 0) {
+            fileIndex = i;
+            break;
+        }
+    }
+
+    if (fileIndex == -1) {
+        printf("ERROR: File '%s' not found!\n", fileName);
+        return;
+    }
+
+    int cluster = file_table[fileIndex].start_block;
+    fat[cluster] = -1; 
+
+    file_table[fileIndex].in_use = 0;
+    printf("File '%s' erased!\n", fileName);
+}
+
 // Debug function to print the file table
 void printFileTable() {
     printf("\nCurrent File Table:\n");
@@ -122,6 +144,12 @@ int main() {
 
     // Print file table to check if files are added correctly
     printFileTable();
-    
+
+    // Test file erase
+    eraseFile("example.txt");
+
+    // Print file table to check if file is erased correctly
+    printFileTable();
+
     return 0;
 }
