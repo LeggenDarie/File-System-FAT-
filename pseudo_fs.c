@@ -4,7 +4,7 @@
 
 // File system parameters
 #define FS_SIZE (1024 * 1024)
-#define CLUSTER_SIZE 512 
+#define CLUSTER_SIZE 1024
 #define NUM_CLUSTERS (FS_SIZE / CLUSTER_SIZE)
 
 #define MAX_FILES 100
@@ -24,6 +24,11 @@ int fat[NUM_CLUSTERS];
 // File table with fixed entries
 FileEntry file_table[MAX_FILES];  
 
+// FileHandle structure to track file position
+typedef struct {
+    int file_index; 
+    int position;
+} FileHandle;
 
 void initFileSystem() {
     // Initialize FAT: set all clusters as free (-1)
@@ -95,7 +100,7 @@ void createFile(const char *fileName) {
     file_table[fileIndex].is_dir = 0;
 
     // Mark the cluster as used in the FAT
-    fat[freeCluster] = 0;  // For now, we use 0 to indicate "end of file"
+    fat[freeCluster] = 0;
 
     printf("File '%s' created successfully! (File Index: %d, Start Block: %d)\n", 
            file_table[fileIndex].name, fileIndex, file_table[fileIndex].start_block);
@@ -117,10 +122,34 @@ void eraseFile(const char *fileName) {
     }
 
     int cluster = file_table[fileIndex].start_block;
-    fat[cluster] = -1; 
+
+    // Free all clusters occupied by the file
+    while (cluster != -1) {
+        int next_cluster = fat[cluster];  
+        fat[cluster] = -1;  
+        cluster = next_cluster;
+    }
 
     file_table[fileIndex].in_use = 0;
     printf("File '%s' erased!\n", fileName);
+}
+
+// Function to open a file and return a FileHandle
+FileHandle openFile(const char *fileName) {
+    FileHandle fh;
+    fh.file_index = -1;  // Default invalid handle
+
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (file_table[i].in_use == 1 && strcmp(file_table[i].name, fileName) == 0) {
+            fh.file_index = i;
+            fh.position = 0;  // File opened at position 0
+            printf("File '%s' opened (File Index: %d, Position: %d)\n", fileName, fh.file_index, fh.position);
+            return fh;
+        }
+    }
+
+    printf("ERROR: File '%s' not found!\n", fileName);
+    return fh;
 }
 
 // Debug function to print the file table
@@ -138,17 +167,61 @@ void printFileTable() {
 int main() {
     initFileSystem();
 
+    // Print the file table before creating a file
+    printf("\nFILE TABLE BEFORE CREATING A FILE:\n");
+    printFileTable();
+
+    // Print FAT state before creating a file
+    printf("\nFAT STATE BEFORE CREATING A FILE:\n");
+    for (int i = 0; i < 10; i++) {
+        printf("FAT[%d] = %d\n", i, fat[i]);
+    }
+
     // Test file creation
     createFile("example.txt");
     createFile("test.doc");
 
-    // Print file table to check if files are added correctly
+    // Print the file table after creating a file
+    printf("\nFILE TABLE AFTER CREATING A FILE:\n");
+    printFileTable();
+
+    // Print FAT state after creating a file
+    printf("\nFAT STATE AFTER CREATING A FILE:\n");
+    for (int i = 0; i < 10; i++) {
+        printf("FAT[%d] = %d\n", i, fat[i]);
+    }
+
+    // Open file and check if the FileHandle works
+    printf("\nOpening file 'example.txt'...\n");
+    FileHandle fh = openFile("example.txt");
+
+    if (fh.file_index == -1) {
+        printf("ERROR: Failed to open file 'example.txt'.\n");
+        return 1;
+    }
+
+    // Print FileHandle details
+    printf("\nFILE HANDLE STATE (AFTER OPENING):\n");
+    printf("File Index: %d\n", fh.file_index);
+    printf("File Position: %d\n", fh.position);
+
+    fh.position = 10;
+    printf("Manually moved position to %d\n", fh.position);
+
+    // Print updated FileHandle details
+    printf("\nUPDATED FILE HANDLE STATE:\n");
+    printf("File Index: %d\n", fh.file_index);
+    printf("File Position: %d\n", fh.position);
+
+    // Print the file table again after opening a file
+    printf("\nFILE TABLE AFTER OPENING A FILE:\n");
     printFileTable();
 
     // Test file erase
     eraseFile("example.txt");
 
     // Print file table to check if file is erased correctly
+    printf("\nFILE TABLE AFTER ERASING A FILE:\n");
     printFileTable();
 
     return 0;
