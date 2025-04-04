@@ -63,16 +63,16 @@ void initFileSystem() {
     fat = (int *)fs_memory;
     file_table = (FileEntry *)(fat + NUM_CLUSTERS);
 
-    int initialized = 0;
+    int is_new_disk = 1;
     // Initialize FAT: set all clusters as free (-1)
     for (int i = 0; i < NUM_CLUSTERS; i++) {
-        if (fat[i] != 0 && fat[i] != -1) {
-            initialized = 1;
+        if (file_table[i].in_use) {
+            is_new_disk = 0;
             break;
         }
     }
 
-    if (!initialized) {
+    if (is_new_disk) {
         printf("New disk, initializing FAT and file table...\n");
         for (int i = 0; i < NUM_CLUSTERS; i++) {
             fat[i] = -1;
@@ -83,22 +83,6 @@ void initFileSystem() {
     } else {
         printf("Existing file system found in disk.bin\n");
     }
-    
-    // Print entire FAT to check if initialization is correct
-    /*
-    printf("DEBUG: FAT state after initialization:\n");
-    for (int i = 0; i < NUM_CLUSTERS; i++) {
-        printf("FAT[%d] = %d\n", i, fat[i]);  // Should all be -1
-    }
-    */
-    
-    // Print entire file table to check if initialization is correct
-    /*
-    printf("DEBUG: File table state after initialization:\n");
-    for (int i = 0; i < MAX_FILES; i++) {
-        printf("File %d -> in_use: %d, name: '%s'\n", i, file_table[i].in_use, file_table[i].name);
-    }
-    */
 }
 
 // Function to find a free cluster in the FAT
@@ -186,8 +170,34 @@ int main() {
     printf("\nFILE TABLE BEFORE CREATING A FILE:\n");
     printFileTable();
 
-    // Print FAT state before creating a file
-    printf("\nFAT STATE BEFORE CREATING A FILE:\n");
+    int already_exists = 0;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (file_table[i].in_use && strcmp(file_table[i].name, "example.txt") == 0) {
+            already_exists = 1;
+            break;
+        }
+    }
+    if (!already_exists) {
+        createFile("example.txt");
+    }
+
+    already_exists = 0;
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (file_table[i].in_use && strcmp(file_table[i].name, "test.doc") == 0) {
+            already_exists = 1;
+            break;
+        }
+    }
+    if (!already_exists) {
+        createFile("test.doc");
+    }
+
+    // Print FAT table after creating a file
+    printf("\nFILE TABLE AFTER CREATION:\n");
+    printFileTable();
+
+    // Print FAT state
+    printf("\nFAT STATE:\n");
     for (int i = 0; i < 10; i++) {
         printf("FAT[%d] = %d\n", i, fat[i]);
     }
