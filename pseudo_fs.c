@@ -3,12 +3,14 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 // File system parameters
 #define FS_SIZE (1024 * 1024)
 #define CLUSTER_SIZE 1024
 #define NUM_CLUSTERS (FS_SIZE / CLUSTER_SIZE)
-
+#define DISK_FILE "disk.bin"
 #define MAX_FILES 100
 
 // Structure for a file entry or a directory
@@ -32,22 +34,54 @@ int *fat;
 FileEntry *file_table;
 
 void initFileSystem() {
-    // Allocate memory with mmap
-    fs_memory = mmap(NULL, FS_SIZE, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-    if (fs_memory == MAP_FAILED) {
-        perror("mmap failed");
+
+    int fd = open(DISK_FILE, O_RDWR | O_CREAT, 0666);
+    if (fd < 0) {
+        perror("open failed");
         exit(1);
     }
+
+    // Make sure the file is exactly FS_SIZE bytes
+    if (ftruncate(fd, FS_SIZE) < 0) {
+        perror("ftruncate failed");
+        close(fd);
+        exit(1);
+    }
+
+    // Allocate memory with mmap
+    fs_memory = mmap(NULL, FS_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (fs_memory == MAP_FAILED) {
+        perror("mmap failed");
+        close(fd);
+        exit(1);
+    }
+    close(fd);
     
-    printf("mmap() successful! Memory mapped at: %p\n", fs_memory);
+    printf("mmap() successful! Memory mapped at: %p (file: %s)\n", fs_memory, DISK_FILE);
 
     // Assign memory to FAT and file table
     fat = (int *)fs_memory;
     file_table = (FileEntry *)(fat + NUM_CLUSTERS);
 
+    int initialized = 0;
     // Initialize FAT: set all clusters as free (-1)
     for (int i = 0; i < NUM_CLUSTERS; i++) {
-        fat[i] = -1;
+        if (fat[i] != 0 && fat[i] != -1) {
+            initialized = 1;
+            break;
+        }
+    }
+
+    if (!initialized) {
+        printf("New disk, initializing FAT and file table...\n");
+        for (int i = 0; i < NUM_CLUSTERS; i++) {
+            fat[i] = -1;
+        }
+        for (int i = 0; i < MAX_FILES; i++) {
+            file_table[i].in_use = 0;
+        }
+    } else {
+        printf("Existing file system found in disk.bin\n");
     }
     
     // Print entire FAT to check if initialization is correct
@@ -57,11 +91,6 @@ void initFileSystem() {
         printf("FAT[%d] = %d\n", i, fat[i]);  // Should all be -1
     }
     */
-
-    // Initialize file table: set all entries as unused
-    for (int i = 0; i < MAX_FILES; i++) {
-        file_table[i].in_use = 0;
-    }
     
     // Print entire file table to check if initialization is correct
     /*
@@ -70,7 +99,6 @@ void initFileSystem() {
         printf("File %d -> in_use: %d, name: '%s'\n", i, file_table[i].in_use, file_table[i].name);
     }
     */
-    printf("File system initialized!\n");
 }
 
 // Function to find a free cluster in the FAT
@@ -164,47 +192,11 @@ int main() {
         printf("FAT[%d] = %d\n", i, fat[i]);
     }
 
-    // Test file creation
-    createFile("example.txt");
-    createFile("test.doc");
-
-    // Print the file table after creating a file
-    printf("\nFILE TABLE AFTER CREATING A FILE:\n");
-    printFileTable();
-
-    // Print FAT state after creating a file
-    printf("\nFAT STATE AFTER CREATING A FILE:\n");
-    for (int i = 0; i < 10; i++) {
-        printf("FAT[%d] = %d\n", i, fat[i]);
-    }
-
-    // Open file and check if the FileHandle works
-    printf("\nOpening file 'example.txt'...\n");
+    //Open a file
     FileHandle fh = openFile("example.txt");
-
-    // Print FileHandle details
-    printf("\nFILE HANDLE STATE (AFTER OPENING):\n");
-    printf("File Index: %d\n", fh.file_index);
-    printf("File Position: %d\n", fh.position);
-
-    fh.position = 10;
-    printf("Manually moved position to %d\n", fh.position);
-
-    // Print updated FileHandle details
-    printf("\nUPDATED FILE HANDLE STATE:\n");
-    printf("File Index: %d\n", fh.file_index);
-    printf("File Position: %d\n", fh.position);
-
-    // Print the file table again after opening a file
-    printf("\nFILE TABLE AFTER OPENING A FILE:\n");
-    printFileTable();
-
-    // Test file erase
-    eraseFile("example.txt");
-
-    // Print file table to check if file is erased correctly
-    printf("\nFILE TABLE AFTER ERASING A FILE:\n");
-    printFileTable();
+    if (fh.file_index != -1) {
+        printf("Opened 'example.txt' successfully, position = %d\n", fh.position);
+    }
 
     return 0;
 }
