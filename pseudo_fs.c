@@ -135,6 +135,32 @@ void eraseFile(const char *fileName) {
     printf("ERROR: File '%s' not found!\n", fileName);
 }
 
+void writeFile(FileHandle fh, const void *buffer, int size) {
+    if (fh.file_index == -1) {
+        printf("Invalid FileHandle!\n");
+        return;
+    }
+
+    int cluster = file_table[fh.file_index].start_block;
+    void *cluster_start = (void *)((char *)fs_memory + CLUSTER_SIZE * cluster);
+
+    memcpy(cluster_start, buffer, size);
+    printf("Wrote %d bytes to file '%s' (cluster %d)\n", size, file_table[fh.file_index].name, cluster);
+}
+
+void readFile(FileHandle fh, void *buffer, int size) {
+    if (fh.file_index == -1) {
+        printf("Invalid FileHandle!\n");
+        return;
+    }
+
+    int cluster = file_table[fh.file_index].start_block;
+    void *cluster_start = (void *)((char *)fs_memory + CLUSTER_SIZE * cluster);
+
+    memcpy(buffer, cluster_start, size);
+    printf("Read %d bytes from file '%s' (cluster %d)\n", size, file_table[fh.file_index].name, cluster);
+}
+
 // Function to open a file and return a FileHandle
 FileHandle openFile(const char *fileName) {
     FileHandle fh = {-1, 0};
@@ -207,6 +233,13 @@ int main() {
     if (fh.file_index != -1) {
         printf("Opened 'example.txt' successfully, position = %d\n", fh.position);
     }
+
+    char data[] = "Hello FAT FS!";
+    writeFile(fh, data, strlen(data) + 1);
+
+    char buffer[50];
+    readFile(fh, buffer, 50);
+    printf("Read content: %s\n", buffer);
 
     return 0;
 }
