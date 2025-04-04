@@ -12,6 +12,7 @@
 #define NUM_CLUSTERS (FS_SIZE / CLUSTER_SIZE)
 #define DISK_FILE "disk.bin"
 #define MAX_FILES 100
+#define DATA_OFFSET (sizeof(int) * NUM_CLUSTERS + sizeof(FileEntry) * MAX_FILES)
 
 // Structure for a file entry or a directory
 typedef struct {
@@ -124,7 +125,7 @@ void eraseFile(const char *fileName) {
             int cluster = file_table[i].start_block;
             while (cluster != -1) {
                 int next = fat[cluster];
-                fat[cluster] = -1; // Free cluster
+                fat[cluster] = -1;
                 cluster = next;
             }
             file_table[i].in_use = 0;
@@ -142,9 +143,10 @@ void writeFile(FileHandle fh, const void *buffer, int size) {
     }
 
     int cluster = file_table[fh.file_index].start_block;
-    void *cluster_start = (void *)((char *)fs_memory + CLUSTER_SIZE * cluster);
+    void *cluster_start = (void *)((char *)fs_memory + DATA_OFFSET + CLUSTER_SIZE * cluster);
 
     memcpy(cluster_start, buffer, size);
+    file_table[fh.file_index].size += size;
     printf("Wrote %d bytes to file '%s' (cluster %d)\n", size, file_table[fh.file_index].name, cluster);
 }
 
@@ -155,7 +157,7 @@ void readFile(FileHandle fh, void *buffer, int size) {
     }
 
     int cluster = file_table[fh.file_index].start_block;
-    void *cluster_start = (void *)((char *)fs_memory + CLUSTER_SIZE * cluster);
+    void *cluster_start = (void *)((char *)fs_memory + DATA_OFFSET + CLUSTER_SIZE * cluster);
 
     memcpy(buffer, cluster_start, size);
     printf("Read %d bytes from file '%s' (cluster %d)\n", size, file_table[fh.file_index].name, cluster);
@@ -191,7 +193,82 @@ void printFileTable() {
 
 int main() {
     initFileSystem();
+    printf("\n[FAT-FS] File system avviato.\n");
+    int running = 1;
+    while (running) {
+        printf("\nScegli un'operazione:\n");
+        printf("1. Mostra FAT\n");
+        printf("2. Mostra File Table\n");
+        printf("3. Crea un file\n");
+        printf("4. Scrivi in un file\n");
+        printf("5. Leggi da un file\n");
+        printf("6. Cancella un file\n");
+        printf("0. Esci\n");
+        printf(">> ");
 
+        int choice;
+        scanf("%d", &choice);
+        getchar();
+
+        char name[50];
+        char buffer[1024];
+        int size;
+
+        switch (choice) {
+            case 1:
+                printf("\nFAT STATE:\n");
+                for (int i = 0; i < 10; i++) {
+                    printf("FAT[%d] = %d\n", i, fat[i]);
+                }
+                break;
+            case 2:
+                printFileTable();
+                break;
+            case 3:
+                printf("Inserisci il nome del file da creare: ");
+                fgets(name, sizeof(name), stdin);
+                name[strcspn(name, "\n")] = 0;
+                createFile(name);
+                break;
+            case 4:
+                printf("Nome file da aprire per scrittura: ");
+                fgets(name, sizeof(name), stdin);
+                name[strcspn(name, "\n")] = 0;
+                FileHandle fh_w = openFile(name);
+                if (fh_w.file_index != -1) {
+                    printf("Inserisci il contenuto da scrivere: ");
+                    fgets(buffer, sizeof(buffer), stdin);
+                    buffer[strcspn(buffer, "\n")] = 0;
+                    writeFile(fh_w, buffer, strlen(buffer) + 1);
+                }
+                break;
+            case 5:
+                printf("Nome file da aprire per lettura: ");
+                fgets(name, sizeof(name), stdin);
+                name[strcspn(name, "\n")] = 0;
+                FileHandle fh_r = openFile(name);
+                if (fh_r.file_index != -1) {
+                    readFile(fh_r, buffer, 1024);
+                    printf("Contenuto letto: %s\n", buffer);
+                }
+                break;
+            case 6:
+                printf("Nome del file da cancellare: ");
+                fgets(name, sizeof(name), stdin);
+                name[strcspn(name, "\n")] = 0;
+                eraseFile(name);
+                break;
+            case 0:
+                printf("Uscita dal file system.\n");
+                running = 0;
+                break;
+            default:
+                printf("Scelta non valida.\n");
+        }
+    }
+    return 0;
+
+    /*
     // Print the file table before creating a file
     printf("\nFILE TABLE BEFORE CREATING A FILE:\n");
     printFileTable();
@@ -236,10 +313,12 @@ int main() {
 
     char data[] = "Hello FAT FS!";
     writeFile(fh, data, strlen(data) + 1);
+    printf("File size after write: %d\n", file_table[fh.file_index].size);
 
     char buffer[50];
     readFile(fh, buffer, 50);
     printf("Read content: %s\n", buffer);
 
     return 0;
+    */
 }
