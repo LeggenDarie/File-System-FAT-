@@ -136,31 +136,35 @@ void eraseFile(const char *fileName) {
     printf("ERROR: File '%s' not found!\n", fileName);
 }
 
-void writeFile(FileHandle fh, const void *buffer, int size) {
-    if (fh.file_index == -1) {
+void writeFile(FileHandle *fh, const void *buffer, int size) {
+    if (fh->file_index == -1) {
         printf("Invalid FileHandle!\n");
         return;
     }
 
-    int cluster = file_table[fh.file_index].start_block;
+    int cluster = file_table[fh->file_index].start_block;
     void *cluster_start = (void *)((char *)fs_memory + DATA_OFFSET + CLUSTER_SIZE * cluster);
 
-    memcpy(cluster_start, buffer, size);
-    file_table[fh.file_index].size += size;
-    printf("Wrote %d bytes to file '%s' (cluster %d)\n", size, file_table[fh.file_index].name, cluster);
+    memcpy((char*)cluster_start + fh->position, buffer, size);
+    fh->position +=size;
+    if (fh->position > file_table[fh->file_index].size) {
+        file_table[fh->file_index].size = fh->position;
+    }
+    printf("Wrote %d bytes to file '%s' (cluster %d)\n", size, file_table[fh->file_index].name, cluster);
 }
 
-void readFile(FileHandle fh, void *buffer, int size) {
-    if (fh.file_index == -1) {
+void readFile(FileHandle *fh, void *buffer, int size) {
+    if (fh->file_index == -1) {
         printf("Invalid FileHandle!\n");
         return;
     }
 
-    int cluster = file_table[fh.file_index].start_block;
+    int cluster = file_table[fh->file_index].start_block;
     void *cluster_start = (void *)((char *)fs_memory + DATA_OFFSET + CLUSTER_SIZE * cluster);
 
-    memcpy(buffer, cluster_start, size);
-    printf("Read %d bytes from file '%s' (cluster %d)\n", size, file_table[fh.file_index].name, cluster);
+    memcpy(buffer, (char *)cluster_start + fh->position, size);
+    fh->position += size;
+    printf("Read %d bytes from file '%s' (cluster %d)\n", size, file_table[fh->file_index].name, cluster);
 }
 
 // Function to open a file and return a FileHandle
@@ -169,7 +173,7 @@ FileHandle openFile(const char *fileName) {
     for (int i = 0; i < MAX_FILES; i++) {
         if (file_table[i].in_use == 1 && strcmp(file_table[i].name, fileName) == 0) {
             fh.file_index = i;
-            fh.position = 0;
+            fh.position = file_table[i].size;
             printf("File '%s' opened (File Index: %d, Position: %d)\n", fileName, fh.file_index, fh.position);
             return fh;
         }
@@ -236,10 +240,11 @@ int main() {
                 name[strcspn(name, "\n")] = 0;
                 FileHandle fh_w = openFile(name);
                 if (fh_w.file_index != -1) {
+                    fh_w.position = file_table[fh_w.file_index].size;
                     printf("Inserisci il contenuto da scrivere: ");
                     fgets(buffer, sizeof(buffer), stdin);
                     buffer[strcspn(buffer, "\n")] = 0;
-                    writeFile(fh_w, buffer, strlen(buffer) + 1);
+                    writeFile(&fh_w, buffer, strlen(buffer));
                 }
                 break;
             case 5:
@@ -248,7 +253,8 @@ int main() {
                 name[strcspn(name, "\n")] = 0;
                 FileHandle fh_r = openFile(name);
                 if (fh_r.file_index != -1) {
-                    readFile(fh_r, buffer, 1024);
+                    fh_r.position = 0;
+                    readFile(&fh_r, buffer, 1024);
                     printf("Contenuto letto: %s\n", buffer);
                 }
                 break;
@@ -267,58 +273,4 @@ int main() {
         }
     }
     return 0;
-
-    /*
-    // Print the file table before creating a file
-    printf("\nFILE TABLE BEFORE CREATING A FILE:\n");
-    printFileTable();
-
-    int already_exists = 0;
-    for (int i = 0; i < MAX_FILES; i++) {
-        if (file_table[i].in_use && strcmp(file_table[i].name, "example.txt") == 0) {
-            already_exists = 1;
-            break;
-        }
-    }
-    if (!already_exists) {
-        createFile("example.txt");
-    }
-
-    already_exists = 0;
-    for (int i = 0; i < MAX_FILES; i++) {
-        if (file_table[i].in_use && strcmp(file_table[i].name, "test.doc") == 0) {
-            already_exists = 1;
-            break;
-        }
-    }
-    if (!already_exists) {
-        createFile("test.doc");
-    }
-
-    // Print FAT table after creating a file
-    printf("\nFILE TABLE AFTER CREATION:\n");
-    printFileTable();
-
-    // Print FAT state
-    printf("\nFAT STATE:\n");
-    for (int i = 0; i < 10; i++) {
-        printf("FAT[%d] = %d\n", i, fat[i]);
-    }
-
-    //Open a file
-    FileHandle fh = openFile("example.txt");
-    if (fh.file_index != -1) {
-        printf("Opened 'example.txt' successfully, position = %d\n", fh.position);
-    }
-
-    char data[] = "Hello FAT FS!";
-    writeFile(fh, data, strlen(data) + 1);
-    printf("File size after write: %d\n", file_table[fh.file_index].size);
-
-    char buffer[50];
-    readFile(fh, buffer, 50);
-    printf("Read content: %s\n", buffer);
-
-    return 0;
-    */
 }
